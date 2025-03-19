@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     aws_region: str = os.getenv("AWS_REGION", "us-east-1")
     dynamodb_table: str = os.getenv("DYNAMODB_TABLE", "oauth-tokens-dev")
     stage: str = os.getenv("STAGE", "dev")
+    
+    # Development mode flag - set to True to skip database operations
+    dev_mode: bool = os.getenv("DEV_MODE", "false").lower() == "true"
 
     # Sketchfab OAuth configuration
     sketchfab_client_id: str = os.getenv("SKETCHFAB_CLIENT_ID", "")

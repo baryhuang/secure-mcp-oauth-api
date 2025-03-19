@@ -1,13 +1,15 @@
 """
 Sketchfab OAuth service implementation.
 """
+import json
+import time
 from typing import Dict, Optional
 from urllib.parse import urlencode
 
 import requests
 from fastapi import HTTPException, status
 
-from app.config.settings import get_oauth_config
+from app.config.settings import get_oauth_config, get_settings
 from app.models.oauth import OAuthTokenResponse, UserInfo
 from app.services.oauth_base import BaseOAuthService
 
@@ -23,6 +25,7 @@ class SketchfabOAuthService(BaseOAuthService):
         """
         super().__init__("sketchfab")
         self.config = get_oauth_config("sketchfab")
+        self.settings = get_settings()
     
     def get_authorization_url(self) -> str:
         """
@@ -49,6 +52,10 @@ class SketchfabOAuthService(BaseOAuthService):
         Returns:
             OAuthTokenResponse: The OAuth token.
         """
+        # If using placeholder credentials, return mock data
+        if self.config["client_id"] == "your_sketchfab_client_id" or not self.config["client_id"]:
+            return self._get_mock_token()
+            
         data = {
             "grant_type": "authorization_code",
             "code": code,
@@ -85,6 +92,10 @@ class SketchfabOAuthService(BaseOAuthService):
         Returns:
             OAuthTokenResponse: The new OAuth token.
         """
+        # If using placeholder credentials, return mock data
+        if self.config["client_id"] == "your_sketchfab_client_id" or not self.config["client_id"]:
+            return self._get_mock_token()
+            
         data = {
             "grant_type": "refresh_token",
             "client_id": self.config["client_id"],
@@ -120,6 +131,10 @@ class SketchfabOAuthService(BaseOAuthService):
         Returns:
             UserInfo: The user information.
         """
+        # If using placeholder credentials, return mock data
+        if self.config["client_id"] == "your_sketchfab_client_id" or not self.config["client_id"]:
+            return self._get_mock_user_info()
+            
         headers = {
             "Authorization": f"Bearer {access_token}"
         }
@@ -142,4 +157,43 @@ class SketchfabOAuthService(BaseOAuthService):
             profile_url=user_data.get("profileUrl"),
             avatar_url=user_data.get("avatar", {}).get("url"),
             raw_data=user_data
+        )
+    
+    def _get_mock_token(self) -> OAuthTokenResponse:
+        """
+        Generate a mock token for testing purposes.
+        
+        Returns:
+            OAuthTokenResponse: A mock OAuth token.
+        """
+        return OAuthTokenResponse(
+            access_token=f"mock_access_token_{int(time.time())}",
+            token_type="Bearer",
+            expires_in=3600,
+            refresh_token=f"mock_refresh_token_{int(time.time())}",
+            scope="read write"
+        )
+    
+    def _get_mock_user_info(self) -> UserInfo:
+        """
+        Generate mock user information for testing purposes.
+        
+        Returns:
+            UserInfo: Mock user information.
+        """
+        return UserInfo(
+            id="mock_user_123",
+            username="mock_sketchfab_user",
+            email="mock_user@example.com",
+            profile_url="https://sketchfab.com/mock_user",
+            avatar_url="https://sketchfab.com/avatars/mock_user.jpg",
+            raw_data={
+                "uid": "mock_user_123",
+                "username": "mock_sketchfab_user",
+                "email": "mock_user@example.com",
+                "profileUrl": "https://sketchfab.com/mock_user",
+                "avatar": {
+                    "url": "https://sketchfab.com/avatars/mock_user.jpg"
+                }
+            }
         ) 

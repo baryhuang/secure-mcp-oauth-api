@@ -77,12 +77,18 @@ async def callback(
     user_id = "user123"
     service.store_token(user_id, token)
     
+    # For testing purposes, return more information
     return {
-        "access_token": token.access_token,
-        "token_type": token.token_type,
-        "expires_in": token.expires_in,
+        "message": "Successfully authenticated with Sketchfab",
         "provider": provider,
-        "user_id": user_id
+        "user_id": user_id,
+        "token_info": {
+            "access_token": token.access_token,
+            "token_type": token.token_type,
+            "expires_in": token.expires_in,
+            "refresh_token": token.refresh_token,
+            "scope": token.scope
+        }
     }
 
 
@@ -118,6 +124,7 @@ async def refresh_token(
     service.store_token(refresh_request.user_id, token)
     
     return {
+        "message": "Token refreshed successfully",
         "access_token": token.access_token,
         "token_type": token.token_type,
         "expires_in": token.expires_in,

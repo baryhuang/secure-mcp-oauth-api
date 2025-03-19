@@ -5,9 +5,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Tuple, Union
 
-import boto3
 import requests
-from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
 
 from app.config.settings import get_settings
@@ -28,11 +26,9 @@ class BaseOAuthService(ABC):
         """
         self.provider = provider
         self.settings = get_settings()
-        self.dynamodb = boto3.resource(
-            'dynamodb', 
-            region_name=self.settings.aws_region
-        )
-        self.table = self.dynamodb.Table(self.settings.dynamodb_table)
+        
+        # In-memory token storage (for development/testing)
+        self._tokens = {}
     
     @abstractmethod
     def get_authorization_url(self) -> str:
@@ -85,13 +81,13 @@ class BaseOAuthService(ABC):
     
     def store_token(self, user_id: str, token: OAuthTokenResponse) -> None:
         """
-        Store an OAuth token in DynamoDB.
+        Store an OAuth token in memory (for development/testing).
         
         Args:
             user_id: The user ID.
             token: The OAuth token.
         """
-        # Calculate TTL for automatic token expiration
+        # Calculate TTL for token expiration
         expires_at = int(time.time()) + token.expires_in
         
         oauth_token = OAuthToken(
@@ -105,17 +101,13 @@ class BaseOAuthService(ABC):
             expires_at=expires_at
         )
         
-        try:
-            self.table.put_item(Item=oauth_token.model_dump())
-        except ClientError as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to store token: {str(e)}"
-            )
+        # Store in memory
+        key = f"{user_id}:{self.provider}"
+        self._tokens[key] = oauth_token
     
     def get_token(self, user_id: str) -> Optional[OAuthToken]:
         """
-        Get an OAuth token from DynamoDB.
+        Get an OAuth token from memory.
         
         Args:
             user_id: The user ID.
@@ -123,43 +115,19 @@ class BaseOAuthService(ABC):
         Returns:
             Optional[OAuthToken]: The OAuth token if found, None otherwise.
         """
-        try:
-            response = self.table.get_item(
-                Key={
-                    'user_id': user_id,
-                    'provider': self.provider
-                }
-            )
-            
-            if 'Item' in response:
-                return OAuthToken(**response['Item'])
-            
-            return None
-        except ClientError as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to retrieve token: {str(e)}"
-            )
+        key = f"{user_id}:{self.provider}"
+        return self._tokens.get(key)
     
     def delete_token(self, user_id: str) -> None:
         """
-        Delete an OAuth token from DynamoDB.
+        Delete an OAuth token from memory.
         
         Args:
             user_id: The user ID.
         """
-        try:
-            self.table.delete_item(
-                Key={
-                    'user_id': user_id,
-                    'provider': self.provider
-                }
-            )
-        except ClientError as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to delete token: {str(e)}"
-            )
+        key = f"{user_id}:{self.provider}"
+        if key in self._tokens:
+            del self._tokens[key]
     
     def handle_request_error(
         self, 
