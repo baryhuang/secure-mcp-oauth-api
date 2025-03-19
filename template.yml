@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: OAuth API Service for multiple providers
+
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.11
+    MemorySize: 128
+    Environment:
+      Variables:
+        DYNAMODB_TABLE: !Ref OAuthTokensTable
+        STAGE: !Ref Stage
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+    Description: Deployment stage
+
+Resources:
+  OAuthTokensTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub oauth-tokens-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: provider
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: provider
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+
+  OAuthApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: app/main.handler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OAuthTokensTable
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref OAuthApi
+
+  OAuthApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+      Cors:
+        AllowMethods: "'*'"
+        AllowHeaders: "'*'"
+        AllowOrigin: "'*'"
+
+Outputs:
+  ApiUrl:
+    Description: URL of the OAuth API
+    Value: !Sub https://${OAuthApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
+  OAuthTokensTableName:
+    Description: Name of the DynamoDB table storing OAuth tokens
+    Value: !Ref OAuthTokensTable 
