@@ -79,7 +79,7 @@ async def callback(
     
     # For testing purposes, return more information
     return {
-        "message": "Successfully authenticated with Sketchfab",
+        "message": f"Successfully authenticated with {provider}",
         "provider": provider,
         "user_id": user_id,
         "token_info": {

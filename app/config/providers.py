@@ -6,6 +6,7 @@ from typing import Dict, List, Set, Type
 
 # Import provider service classes once created
 from app.services.providers.sketchfab import SketchfabOAuthService
+from app.services.providers.google import GoogleOAuthService
 
 
 class OAuthProvider(str, Enum):
@@ -13,12 +14,14 @@ class OAuthProvider(str, Enum):
     Enum for supported OAuth providers.
     """
     SKETCHFAB = "sketchfab"
+    GOOGLE = "google"
     # Add more providers here as needed
 
 
 # Register provider service classes
 PROVIDER_SERVICES: Dict[str, Type] = {
     OAuthProvider.SKETCHFAB: SketchfabOAuthService,
+    OAuthProvider.GOOGLE: GoogleOAuthService,
     # Add more providers here as needed
 }
 

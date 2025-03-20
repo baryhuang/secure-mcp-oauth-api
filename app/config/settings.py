@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     sketchfab_client_secret: str = os.getenv("SKETCHFAB_CLIENT_SECRET", "")
     sketchfab_redirect_uri: str = os.getenv("SKETCHFAB_REDIRECT_URI", "")
     
+    # Google OAuth configuration
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "")
+    
     # Base URLs for API endpoints
     api_base_path: str = "/api/oauth"
 
@@ -74,5 +79,14 @@ def get_oauth_config(provider: str) -> Dict[str, str]:
         }
     
     # Add more providers here
+    elif provider == "google":
+        return {
+            "client_id": settings.google_client_id,
+            "client_secret": settings.google_client_secret,
+            "redirect_uri": settings.google_redirect_uri,
+            "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+            "token_url": "https://oauth2.googleapis.com/token",
+            "api_base_url": "https://www.googleapis.com/oauth2/v2/",
+        }
     
     raise ValueError(f"Unsupported provider: {provider}") 
