@@ -9,7 +9,6 @@ Globals:
     MemorySize: 128
     Environment:
       Variables:
-        DYNAMODB_TABLE: !Ref OAuthTokensTable
         STAGE: !Ref Stage
 
 Parameters:
@@ -22,54 +21,71 @@ Parameters:
     Description: Deployment stage
 
 Resources:
-  OAuthTokensTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      TableName: !Sub oauth-tokens-${Stage}
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: user_id
-          AttributeType: S
-        - AttributeName: provider
-          AttributeType: S
-      KeySchema:
-        - AttributeName: user_id
-          KeyType: HASH
-        - AttributeName: provider
-          KeyType: RANGE
-      TimeToLiveSpecification:
-        AttributeName: expires_at
-        Enabled: true
-
   OAuthApiFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ./
       Handler: app/main.handler
+      Runtime: python3.11
+      Architectures:
+        - x86_64
+      MemorySize: 512
+      Timeout: 60
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
       Policies:
         - DynamoDBCrudPolicy:
-            TableName: !Ref OAuthTokensTable
+            TableName: !Ref OAuthDataTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource:
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${Stage}/oauth-api-*'
       Events:
-        ApiEvent:
-          Type: Api
+        ApiEvents:
+          Type: HttpApi
           Properties:
-            Path: /{proxy+}
-            Method: ANY
-            RestApiId: !Ref OAuthApi
+            ApiId: !Ref OAuthApi
 
   OAuthApi:
-    Type: AWS::Serverless::Api
+    Type: AWS::Serverless::HttpApi
     Properties:
-      StageName: !Ref Stage
-      Cors:
-        AllowMethods: "'*'"
-        AllowHeaders: "'*'"
-        AllowOrigin: "'*'"
+      CorsConfiguration:
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - '*'
+        AllowOrigins:
+          - '*'
+        MaxAge: 86400
+        ExposeHeaders:
+          - '*'
+          
+  OAuthDataTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
 
 Outputs:
   ApiUrl:
     Description: URL of the OAuth API
-    Value: !Sub https://${OAuthApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/
-  OAuthTokensTableName:
-    Description: Name of the DynamoDB table storing OAuth tokens
-    Value: !Ref OAuthTokensTable 
+    Value: !Sub https://${OAuthApi}.execute-api.${AWS::Region}.amazonaws.com

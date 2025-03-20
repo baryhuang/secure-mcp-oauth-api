@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class OAuthToken(BaseModel):
     """
-    OAuth token model for storing in DynamoDB.
+    OAuth token model.
     """
     user_id: str
     provider: str
@@ -20,7 +20,7 @@ class OAuthToken(BaseModel):
 
     def model_dump(self, **kwargs: Any) -> Dict[str, Any]:
         """
-        Convert model to dictionary for DynamoDB.
+        Convert model to dictionary.
         
         Returns:
             Dict: Dictionary representation of the model.
