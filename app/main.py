@@ -1,6 +1,7 @@
 """
 Main application module for the OAuth API service.
 """
+import os
 import logging
 from typing import Dict
 
@@ -8,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from mangum import Mangum
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.config.settings import get_settings
 from app.routers import oauth
@@ -36,6 +38,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Add session middleware
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.urandom(24),  # Generate a random secret key
+    session_cookie="oauth_session",
+    max_age=3600  # 1 hour
 )
 
 # Add routers

@@ -41,12 +41,14 @@ class BaseOAuthService(ABC):
         pass
     
     @abstractmethod
-    def exchange_code_for_token(self, code: str) -> OAuthTokenResponse:
+    def exchange_code_for_token(self, code: str, code_verifier: Optional[str] = None, state: Optional[str] = None) -> OAuthTokenResponse:
         """
         Exchange an authorization code for an access token.
         
         Args:
             code: The authorization code.
+            code_verifier: Optional PKCE code verifier.
+            state: Optional state parameter from the callback.
             
         Returns:
             OAuthTokenResponse: The OAuth token.
@@ -107,16 +109,39 @@ class BaseOAuthService(ABC):
     
     def get_token(self, user_id: str) -> Optional[OAuthToken]:
         """
-        Get an OAuth token from memory.
+        Get an OAuth token from memory. If token is expired, return None.
         
         Args:
             user_id: The user ID.
             
         Returns:
-            Optional[OAuthToken]: The OAuth token if found, None otherwise.
+            Optional[OAuthToken]: The OAuth token if found and valid, None otherwise.
         """
         key = f"{user_id}:{self.provider}"
-        return self._tokens.get(key)
+        token = self._tokens.get(key)
+        
+        # Check if token exists and is not expired or about to expire (within 60 seconds)
+        if token and token.expires_at:
+            now = time.time()
+            if token.expires_at - now < 60:
+                # Token is expired or about to expire, try to refresh
+                if token.refresh_token:
+                    try:
+                        new_token = self.refresh_token(token.refresh_token)
+                        # Store the new token
+                        self.store_token(user_id, new_token)
+                        # Return the newly stored token
+                        return self._tokens.get(key)
+                    except Exception:
+                        # If refresh fails, delete the token
+                        self.delete_token(user_id)
+                        return None
+                else:
+                    # No refresh token, delete the token
+                    self.delete_token(user_id)
+                    return None
+        
+        return token
     
     def delete_token(self, user_id: str) -> None:
         """

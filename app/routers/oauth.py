@@ -3,7 +3,7 @@ OAuth router module for the API service.
 """
 from typing import Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from fastapi.responses import RedirectResponse
 
 from app.config.providers import get_supported_providers
@@ -16,12 +16,13 @@ router = APIRouter(prefix="/api/oauth")
 
 
 @router.get("/authorize/{provider}")
-async def authorize(provider: str):
+async def authorize(provider: str, request: Request):
     """
     Initiate the OAuth flow by redirecting to the provider's authorization page.
     
     Args:
         provider: The OAuth provider.
+        request: The FastAPI request object.
         
     Returns:
         RedirectResponse: Redirect to the provider's authorization page.
@@ -41,8 +42,10 @@ async def authorize(provider: str):
 @router.get("/callback/{provider}")
 async def callback(
     provider: str,
+    request: Request,
     code: str = Query(...),
     state: Optional[str] = Query(None),
+    code_verifier: Optional[str] = Query(None),
     error: Optional[str] = Query(None),
     error_description: Optional[str] = Query(None)
 ):
@@ -51,8 +54,10 @@ async def callback(
     
     Args:
         provider: The OAuth provider.
+        request: The FastAPI request object.
         code: The authorization code.
-        state: Optional state parameter for CSRF protection.
+        state: Optional state parameter from the provider.
+        code_verifier: Optional PKCE code verifier.
         error: Optional error parameter from the provider.
         error_description: Optional error description from the provider.
         
@@ -68,28 +73,47 @@ async def callback(
             }
         )
     
+    if provider not in get_supported_providers():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported provider: {provider}"
+        )
+    
     service = create_oauth_service(provider)
-    token = service.exchange_code_for_token(code)
     
-    # In a real application, you would identify the user here
-    # and store the token associated with the user.
-    # For simplicity, we're using a fixed user ID in this example.
-    user_id = "user123"
-    service.store_token(user_id, token)
-    
-    # For testing purposes, return more information
-    return {
-        "message": f"Successfully authenticated with {provider}",
-        "provider": provider,
-        "user_id": user_id,
-        "token_info": {
-            "access_token": token.access_token,
-            "token_type": token.token_type,
-            "expires_in": token.expires_in,
-            "refresh_token": token.refresh_token,
-            "scope": token.scope
+    try:
+        # Pass both code_verifier and state to handle different provider implementations
+        token = service.exchange_code_for_token(code, code_verifier, state)
+        
+        # Get user info to verify the token and get the user ID
+        user_info = service.get_user_info(token.access_token)
+        
+        # Store the token with the user's provider ID
+        service.store_token(user_info.id, token)
+        
+        return {
+            "success": True,
+            "user_info": {
+                "id": user_info.id,
+                "username": user_info.username,
+                "email": user_info.email,
+                "profile_url": user_info.profile_url,
+                "avatar_url": user_info.avatar_url
+            },
+            "token_info": {
+                "access_token": token.access_token,
+                "token_type": token.token_type,
+                "expires_in": token.expires_in,
+                "refresh_token": token.refresh_token,
+                "scope": token.scope
+            }
         }
-    }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
 
 @router.post("/refresh/{provider}")
@@ -124,12 +148,12 @@ async def refresh_token(
     service.store_token(refresh_request.user_id, token)
     
     return {
-        "message": "Token refreshed successfully",
+        "success": True,
         "access_token": token.access_token,
         "token_type": token.token_type,
         "expires_in": token.expires_in,
-        "provider": provider,
-        "user_id": refresh_request.user_id
+        "refresh_token": token.refresh_token,
+        "scope": token.scope
     }
 
 

@@ -45,12 +45,14 @@ class GoogleOAuthService(BaseOAuthService):
         
         return f"{self.config['authorize_url']}?{urlencode(params)}"
     
-    def exchange_code_for_token(self, code: str) -> OAuthTokenResponse:
+    def exchange_code_for_token(self, code: str, code_verifier: Optional[str] = None, state: Optional[str] = None) -> OAuthTokenResponse:
         """
         Exchange an authorization code for an access token.
         
         Args:
             code: The authorization code.
+            code_verifier: Optional PKCE code verifier (not used for Google).
+            state: Optional state parameter from the callback (not used for Google).
             
         Returns:
             OAuthTokenResponse: The OAuth token.
@@ -77,12 +79,17 @@ class GoogleOAuthService(BaseOAuthService):
             )
         
         token_data = response.json()
+        # Handle scope being a list by joining it with spaces if needed
+        scope = token_data.get("scope")
+        if isinstance(scope, list):
+            scope = " ".join(scope)
+            
         return OAuthTokenResponse(
             access_token=token_data["access_token"],
             token_type=token_data["token_type"],
             expires_in=token_data.get("expires_in", 3600),
             refresh_token=token_data.get("refresh_token"),
-            scope=token_data.get("scope")
+            scope=scope
         )
     
     def refresh_token(self, refresh_token: str) -> OAuthTokenResponse:
@@ -116,13 +123,18 @@ class GoogleOAuthService(BaseOAuthService):
             )
         
         token_data = response.json()
+        # Handle scope being a list by joining it with spaces if needed
+        scope = token_data.get("scope")
+        if isinstance(scope, list):
+            scope = " ".join(scope)
+            
         # Google doesn't return a refresh token in the refresh flow
         return OAuthTokenResponse(
             access_token=token_data["access_token"],
             token_type=token_data["token_type"],
             expires_in=token_data.get("expires_in", 3600),
             refresh_token=refresh_token,  # Reuse the original refresh token
-            scope=token_data.get("scope")
+            scope=scope
         )
     
     def get_user_info(self, access_token: str) -> UserInfo:

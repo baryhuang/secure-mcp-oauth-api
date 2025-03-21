@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
     google_redirect_uri: str = os.getenv("GOOGLE_REDIRECT_URI", "")
     
+    # Twitter OAuth configuration
+    twitter_client_id: str = os.getenv("TWITTER_CLIENT_ID", "")
+    twitter_client_secret: str = os.getenv("TWITTER_CLIENT_SECRET", "")
+    twitter_redirect_uri: str = os.getenv("TWITTER_REDIRECT_URI", "")
+    
     # Base URLs for API endpoints
     api_base_path: str = "/api/oauth"
 
@@ -86,6 +91,16 @@ def get_oauth_config(provider: str) -> Dict[str, str]:
             "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
             "token_url": "https://oauth2.googleapis.com/token",
             "api_base_url": "https://www.googleapis.com/oauth2/v2/",
+        }
+    elif provider == "twitter":
+        return {
+            "client_id": settings.twitter_client_id,
+            "client_secret": settings.twitter_client_secret,
+            "redirect_uri": settings.twitter_redirect_uri,
+            "authorize_url": "https://twitter.com/i/oauth2/authorize",
+            "token_url": "https://api.twitter.com/2/oauth2/token",
+            "api_base_url": "https://api.twitter.com/2/users/me",
+            "scopes": "tweet.read users.read offline.access",
         }
     
     raise ValueError(f"Unsupported provider: {provider}") 
