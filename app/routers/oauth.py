@@ -1,6 +1,7 @@
 """
 OAuth router module for the API service.
 """
+import logging
 from typing import Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
@@ -11,6 +12,11 @@ from app.config.settings import get_settings
 from app.models.oauth import OAuthRefreshRequest, OAuthTokenResponse, UserInfo
 from app.services.oauth_factory import create_oauth_service
 
+# Configure logger
+logger = logging.getLogger(__name__)
+
+# Define which providers require PKCE
+PKCE_PROVIDERS = ["twitter"]
 
 router = APIRouter(prefix="/api/oauth")
 
@@ -27,7 +33,10 @@ async def authorize(provider: str, request: Request):
     Returns:
         RedirectResponse: Redirect to the provider's authorization page.
     """
+    logger.info(f"Initiating OAuth flow for provider: {provider}")
+    
     if provider not in get_supported_providers():
+        logger.warning(f"Unsupported provider requested: {provider}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported provider: {provider}"
@@ -36,6 +45,7 @@ async def authorize(provider: str, request: Request):
     service = create_oauth_service(provider)
     authorization_url = service.get_authorization_url()
     
+    logger.info(f"Redirecting to {provider} authorization URL")
     return RedirectResponse(authorization_url)
 
 
@@ -64,7 +74,18 @@ async def callback(
     Returns:
         Dict: The OAuth token response.
     """
+    logger.info(f"Handling OAuth callback for provider: {provider}")
+    logger.debug(f"Callback query params: code={code[:5]}***")
+    logger.debug(f"Request headers: {dict(request.headers)}")
+    
+    # Log optional parameters if they exist
+    if state:
+        logger.debug(f"State parameter present: {state[:5]}***")
+    if code_verifier:
+        logger.debug(f"Code verifier present: {code_verifier[:5]}***")
+    
     if error:
+        logger.error(f"OAuth error from provider: {error}, description: {error_description}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
@@ -74,23 +95,61 @@ async def callback(
         )
     
     if provider not in get_supported_providers():
+        logger.warning(f"Unsupported provider in callback: {provider}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported provider: {provider}"
         )
     
+    logger.info(f"Creating OAuth service for provider: {provider}")
     service = create_oauth_service(provider)
     
     try:
-        # Pass both code_verifier and state to handle different provider implementations
+        # Exchange the authorization code for an access token
         token = service.exchange_code_for_token(code, code_verifier, state)
+        logger.info(f"Successfully obtained token for provider: {provider}")
         
-        # Get user info to verify the token and get the user ID
+        # For Google, skip user info retrieval and just return the tokens
+        if provider == "google":
+            return {
+                "access_token": token.access_token,
+                "token_type": token.token_type,
+                "expires_in": token.expires_in,
+                "refresh_token": token.refresh_token,
+                "scope": token.scope
+            }
+        
+        # Get user information using the access token
         user_info = service.get_user_info(token.access_token)
+        logger.info(f"Successfully retrieved user info for provider: {provider}")
         
         # Store the token with the user's provider ID
+        logger.info(f"Storing token for user ID: {user_info.id}")
         service.store_token(user_info.id, token)
         
+        logger.info(f"OAuth flow successfully completed for user: {user_info.username}")
+        
+        # Prepare sanitized response data for logging (without full tokens)
+        log_response = {
+            "success": True,
+            "user_info": {
+                "id": user_info.id,
+                "username": user_info.username,
+                "email": user_info.email,
+                "profile_url": user_info.profile_url,
+                "avatar_url": user_info.avatar_url
+            },
+            "token_info": {
+                "access_token": f"{token.access_token[:10]}..." if token.access_token else None,
+                "token_type": token.token_type,
+                "expires_in": token.expires_in,
+                "refresh_token": f"{token.refresh_token[:10]}..." if token.refresh_token else None,
+                "scope": token.scope
+            }
+        }
+        logger.debug(f"Callback response data: {log_response}")
+        
+        # Return the actual data without truncated tokens
         return {
             "success": True,
             "user_info": {
@@ -110,6 +169,7 @@ async def callback(
         }
         
     except Exception as e:
+        logger.error(f"Exception during OAuth callback: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)

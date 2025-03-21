@@ -90,7 +90,7 @@ def get_oauth_config(provider: str) -> Dict[str, str]:
             "redirect_uri": settings.google_redirect_uri,
             "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
             "token_url": "https://oauth2.googleapis.com/token",
-            "api_base_url": "https://www.googleapis.com/oauth2/v2/",
+            "api_base_url": "https://www.googleapis.com/oauth2/v1/",
         }
     elif provider == "twitter":
         return {
